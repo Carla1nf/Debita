@@ -9,13 +9,30 @@ contract DebitaV1 is ERC1155Holder {
     error notEnoughFunds();
     error requirementsNotFull();
 
-    event LenderOfferCreated(uint256 indexed id, address indexed _owner, address lendingToken, uint apr, uint lendingAmount);
+    event LenderOfferCreated(
+        uint256 indexed id,
+        address indexed _owner,
+        address lendingToken,
+        uint apr,
+        uint lendingAmount
+    );
     event LenderOfferDeleted(uint256 indexed id, address indexed _owner);
-    event CollateralOfferCreated(uint256 indexed id, address indexed _owner, address lendingToken, uint apr, uint lendingAmount);
+    event CollateralOfferCreated(
+        uint256 indexed id,
+        address indexed _owner,
+        address lendingToken,
+        uint apr,
+        uint lendingAmount
+    );
     event CollateralOfferDeleted(uint256 indexed id, address indexed _owner);
-    event LoanAccepted(uint256 newId, address indexed lendingToken, address[] indexed collateralTokens);
+    event LoanAccepted(
+        uint256 newId,
+        address indexed lendingToken,
+        address[] indexed collateralTokens
+    );
 
     address immutable owner;
+    address feeAddress;
     // Id of the Lender Offer ID
     uint256 public Lender_OF_ID;
     // Id of the Collateral Offer ID
@@ -27,8 +44,7 @@ contract DebitaV1 is ERC1155Holder {
     uint32 NFT_ID;
     bool private initialized;
 
-
-   // Lender & Collateral struct is the same right now, will be one  --> struct OfferInfo {}
+    // Lender & Collateral struct is the same right now, will be one  --> struct OfferInfo {}
     struct LenderOInfo {
         address LenderToken;
         address[] wantedCollateralTokens;
@@ -81,9 +97,16 @@ contract DebitaV1 is ERC1155Holder {
     // NFT ID => CLAIMEABLE DEBT
     mapping(uint256 => uint256) public claimeableDebt;
 
-
     constructor() {
         owner = msg.sender;
+        feeAddress = msg.sender;
+    }
+
+    modifier onlyFeeAdd() {
+        if (msg.sender != feeAddress) {
+            revert();
+        }
+        _;
     }
 
     modifier onlyInit() {
@@ -99,16 +122,16 @@ contract DebitaV1 is ERC1155Holder {
     // The function validates the input parameters, and transfers the lender's tokens to the contract.
     // It then stores the lender offer information and emits an event to notify the creation of the lending option.
     /**
-    * @dev Creates a lender option for offering a loan by the lender.
-    * @param _LenderToken The address of the token that the lender wants to lend.
-    * @param _wantedCollateralTokens An array of addresses representing the collateral tokens desired by the lender.
-    * @param _wantedCollateralAmount An array of corresponding amounts of the collateral tokens desired by the lender.
-    * @param _LenderAmount The amount of the lender's token to be lent.
-    * @param _interest The interest rate for the loan. 10 --> 1% && 1 --> 0.1%
-    * @param _timelap The time period for the loan in seconds.
-    * @param _paymentCount The number of payments expected from the borrower.
-    * @param _whitelist An array of whitelisted addresses.
-    */
+     * @dev Creates a lender option for offering a loan by the lender.
+     * @param _LenderToken The address of the token that the lender wants to lend.
+     * @param _wantedCollateralTokens An array of addresses representing the collateral tokens desired by the lender.
+     * @param _wantedCollateralAmount An array of corresponding amounts of the collateral tokens desired by the lender.
+     * @param _LenderAmount The amount of the lender's token to be lent.
+     * @param _interest The interest rate for the loan. 10 --> 1% && 1 --> 0.1%
+     * @param _timelap The time period for the loan in seconds.
+     * @param _paymentCount The number of payments expected from the borrower.
+     * @param _whitelist An array of whitelisted addresses.
+     */
     function createLenderOption(
         address _LenderToken,
         address[] memory _wantedCollateralTokens,
@@ -125,7 +148,7 @@ contract DebitaV1 is ERC1155Holder {
             _wantedCollateralTokens.length != _wantedCollateralAmount.length ||
             _LenderAmount == 0 ||
             _paymentCount > 1000 ||
-            _paymentCount > _LenderAmount || 
+            _paymentCount > _LenderAmount ||
             _whitelist.length > 2
         ) {
             revert();
@@ -137,8 +160,19 @@ contract DebitaV1 is ERC1155Holder {
         } else {
             // If the lender's token is not Ether, transfer the lender amount from the sender to the contract address
             IERC20 B_Token = IERC20(_LenderToken);
-            (bool success) = B_Token.transferFrom(msg.sender, address(this), _LenderAmount);
+            // Check Taxable Tokens --> If it's taxable token, revert
+            uint balanceBefore = B_Token.balanceOf(address(this));
+            bool success = B_Token.transferFrom(
+                msg.sender,
+                address(this),
+                _LenderAmount
+            );
             require(success);
+            uint balanceAfter = B_Token.balanceOf(address(this));
+            require(
+                (balanceAfter - balanceBefore) == _LenderAmount,
+                "Taxable Token"
+            );
         }
 
         Lender_OF_ID++;
@@ -155,7 +189,13 @@ contract DebitaV1 is ERC1155Holder {
             owner: msg.sender
         });
         LendersOffers[Lender_OF_ID] = lastLender;
-        emit LenderOfferCreated(Lender_OF_ID, msg.sender, _LenderToken, _interest, _LenderAmount);
+        emit LenderOfferCreated(
+            Lender_OF_ID,
+            msg.sender,
+            _LenderToken,
+            _interest,
+            _LenderAmount
+        );
     }
 
     // Cancel Lender Offer
@@ -165,13 +205,18 @@ contract DebitaV1 is ERC1155Holder {
             revert();
         }
         delete LendersOffers[id];
-        if(_LenderINFO.LenderToken != address(0x0)) {
+        if (_LenderINFO.LenderToken != address(0x0)) {
             IERC20 B_TOKEN = IERC20(_LenderINFO.LenderToken);
-         (bool success) = B_TOKEN.transfer(msg.sender, _LenderINFO.LenderAmount);
-         require(success);
+            bool success = B_TOKEN.transfer(
+                msg.sender,
+                _LenderINFO.LenderAmount
+            );
+            require(success);
         } else {
-             (bool success, ) = msg.sender.call{value: _LenderINFO.LenderAmount}("");
-             require(success, "Transaction failed");
+            (bool success, ) = msg.sender.call{value: _LenderINFO.LenderAmount}(
+                ""
+            );
+            require(success, "Transaction failed");
         }
         emit LenderOfferDeleted(id, msg.sender);
     }
@@ -179,16 +224,16 @@ contract DebitaV1 is ERC1155Holder {
     // User A offers to provide some collateral, such as a valuable asset, to User B in exchange for the loan. User B agrees to lend the money to User A under the condition that User A puts up the collateral as security for the loan.
 
     /**
-    * @dev Creates a collateral offer for a loan by the borrower.
-    * @param _wantedLenderToken The address of the token that the borrower wants to borrow.
-    * @param collateralTokens An array of addresses representing the collateral tokens being offered.
-    * @param collateralAmount An array of corresponding amounts of the collateral tokens being offered.
-    * @param _wantedLenderAmount The desired amount of the lender's token by the borrower.
-    * @param _interest The interest rate for the loan.  1 --> 0.1%
-    * @param _timelap The time period for the loan in seconds.
-    * @param _paymentCount The number of payments to be made by the borrower.
-    * @param _whitelist An array of whitelisted addresses.
-    */
+     * @dev Creates a collateral offer for a loan by the borrower.
+     * @param _wantedLenderToken The address of the token that the borrower wants to borrow.
+     * @param collateralTokens An array of addresses representing the collateral tokens being offered.
+     * @param collateralAmount An array of corresponding amounts of the collateral tokens being offered.
+     * @param _wantedLenderAmount The desired amount of the lender's token by the borrower.
+     * @param _interest The interest rate for the loan.  1 --> 0.1%
+     * @param _timelap The time period for the loan in seconds.
+     * @param _paymentCount The number of payments to be made by the borrower.
+     * @param _whitelist An array of whitelisted addresses.
+     */
 
     function createCollateralOffer(
         address _wantedLenderToken,
@@ -200,22 +245,21 @@ contract DebitaV1 is ERC1155Holder {
         uint256 _paymentCount,
         address[] memory _whitelist
     ) public payable {
+        // Check various conditions before creating the collateral offer
+        // 1. Check if the time lapse is between 1 day and 365 days
+        // 2. Check if the lengths of collateralTokens and collateralAmount arrays are equal
+        // 3. Check if the wanted lender amount is non-zero
+        // 4. Check if the payment count is less than or equal to 100
+        // 5. Check if the payment count is less than or equal to the wanted lender amount
+        // 6. Check if the length of the whitelist array is at most 2
 
-    // Check various conditions before creating the collateral offer
-    // 1. Check if the time lapse is between 1 day and 365 days
-    // 2. Check if the lengths of collateralTokens and collateralAmount arrays are equal
-    // 3. Check if the wanted lender amount is non-zero
-    // 4. Check if the payment count is less than or equal to 100
-    // 5. Check if the payment count is less than or equal to the wanted lender amount
-    // 6. Check if the length of the whitelist array is at most 2
-        
         if (
             _timelap < 1 days ||
             _timelap > 365 days ||
             collateralTokens.length != collateralAmount.length ||
             _wantedLenderAmount == 0 ||
-             _paymentCount > 100 ||
-            _paymentCount > _wantedLenderAmount || 
+            _paymentCount > 100 ||
+            _paymentCount > _wantedLenderAmount ||
             _whitelist.length > 2
         ) {
             revert();
@@ -228,19 +272,25 @@ contract DebitaV1 is ERC1155Holder {
             } else {
                 // If the collateral token is not Ether, transfer the collateral amount from the sender to the contract address
                 IERC20 ERC20_TOKEN = IERC20(collateralTokens[i]);
-                (bool success) = ERC20_TOKEN.transferFrom(
+                uint balanceBefore = ERC20_TOKEN.balanceOf(address(this));
+                bool success = ERC20_TOKEN.transferFrom(
                     msg.sender,
                     address(this),
                     collateralAmount[i]
                 );
                 require(success);
+                uint balanceAfter = ERC20_TOKEN.balanceOf(address(this));
+                require(
+                    (balanceAfter - balanceBefore) == collateralAmount[i],
+                    "Taxable Token"
+                );
             }
         }
         // Check if the transaction value is greater than or equal to the total collateral amount in Wei
         require(msg.value >= amountWEI, "Not Enough ETHER");
 
         Collateral_OF_ID++;
-       // Create a new CollateralOInfo struct with the provided information
+        // Create a new CollateralOInfo struct with the provided information
         CollateralOInfo memory lastCollateral = CollateralOInfo({
             wantedLenderToken: _wantedLenderToken,
             collaterals: collateralTokens,
@@ -253,7 +303,13 @@ contract DebitaV1 is ERC1155Holder {
             owner: msg.sender
         });
         CollateralOffers[Collateral_OF_ID] = lastCollateral;
-        emit CollateralOfferCreated(Collateral_OF_ID, msg.sender, _wantedLenderToken, _interest,_wantedLenderAmount);
+        emit CollateralOfferCreated(
+            Collateral_OF_ID,
+            msg.sender,
+            _wantedLenderToken,
+            _interest,
+            _wantedLenderAmount
+        );
     }
 
     function cancelCollateralOffer(uint256 _id) public {
@@ -262,28 +318,28 @@ contract DebitaV1 is ERC1155Holder {
         delete CollateralOffers[_id]; // Deleting info before transfering anything
         // Iterate over the collateral tokens and transfer them back to the owner
         for (uint256 i; i < collateralInfo.collateralAmount.length; i++) {
-          if(collateralInfo.collaterals[i] != address(0x0)) {
-             IERC20 token = IERC20(collateralInfo.collaterals[i]);
-             (bool success) = token.transfer(msg.sender, collateralInfo.collateralAmount[i]);
-             require(success);
-          }
-          else {
-             (bool success, ) = msg.sender.call{value: collateralInfo.collateralAmount[i]}("");
-             require(success, "Transaction failed");
-        }
+            if (collateralInfo.collaterals[i] != address(0x0)) {
+                IERC20 token = IERC20(collateralInfo.collaterals[i]);
+                bool success = token.transfer(
+                    msg.sender,
+                    collateralInfo.collateralAmount[i]
+                );
+                require(success);
+            } else {
+                (bool success, ) = msg.sender.call{
+                    value: collateralInfo.collateralAmount[i]
+                }("");
+                require(success, "Transaction failed");
+            }
         }
         emit CollateralOfferDeleted(_id, msg.sender);
     }
 
-
     /**
-    * @dev Accepts a collateral offer and initiates a loan.
-    * @param _id The ID of the collateral offer to accept.
-    */
-    function acceptCollateralOffer(uint256 _id)
-        public
-        payable
-    {
+     * @dev Accepts a collateral offer and initiates a loan.
+     * @param _id The ID of the collateral offer to accept.
+     */
+    function acceptCollateralOffer(uint256 _id) public payable {
         CollateralOInfo memory collateralInfo = CollateralOffers[_id];
         require(
             collateralInfo.owner != address(0x0),
@@ -291,13 +347,19 @@ contract DebitaV1 is ERC1155Holder {
         );
         // Check if Whitelist exists and if the sender is whitelisted
 
-        if (collateralInfo.whitelist.length > 0 && (collateralInfo.whitelist[0] != msg.sender && collateralInfo.whitelist[1] != msg.sender )) {
+        if (
+            collateralInfo.whitelist.length > 0 &&
+            (collateralInfo.whitelist[0] != msg.sender &&
+                collateralInfo.whitelist[1] != msg.sender)
+        ) {
             revert();
-        } 
+        }
 
         delete CollateralOffers[_id]; // Delete the collateral offer from the mapping
 
         // Send Tokens to Collateral Owner
+
+        uint fee = (collateralInfo.wantedLenderAmount * 8) / 1000;
 
         if (collateralInfo.wantedLenderToken == address(0x0)) {
             require(
@@ -305,17 +367,32 @@ contract DebitaV1 is ERC1155Holder {
                 "Not Enough Ether"
             );
             (bool success, ) = collateralInfo.owner.call{
-                value: collateralInfo.wantedLenderAmount
+                value: collateralInfo.wantedLenderAmount - fee
             }("");
             require(success, "Transaction Error");
+            (bool successAdd, ) = payable(feeAddress).call{value: fee}("");
+            require(successAdd, "Transaction Error");
         } else {
             IERC20 wantedToken = IERC20(collateralInfo.wantedLenderToken);
-          (bool success) =  wantedToken.transferFrom(
+            uint balanceBefore = wantedToken.balanceOf(collateralInfo.owner);
+            bool success = wantedToken.transferFrom(
                 msg.sender,
                 collateralInfo.owner,
-                collateralInfo.wantedLenderAmount
+                collateralInfo.wantedLenderAmount - fee
             );
-            require(success);
+            require(success, "Error");
+            uint balanceAfter = wantedToken.balanceOf(collateralInfo.owner);
+            require(
+                (balanceAfter - balanceBefore) ==
+                    collateralInfo.wantedLenderAmount - fee,
+                "Taxable Token"
+            );
+            bool successAdd = wantedToken.transferFrom(
+                msg.sender,
+                feeAddress,
+                fee
+            );
+            require(successAdd, "Error");
         }
 
         // Update States & Mint NFTS (ID % 2 == 0 = 'BORROWER' && ID % 2 == 1 = 'LENDER')
@@ -325,7 +402,11 @@ contract DebitaV1 is ERC1155Holder {
         for (uint256 i; i < 2; i++) {
             ownershipContract.mint();
             if (i == 0) {
-                ownershipContract.transferFrom(address(this), msg.sender,  NFT_ID - 1);
+                ownershipContract.transferFrom(
+                    address(this),
+                    msg.sender,
+                    NFT_ID - 1
+                );
                 loansByNFt[NFT_ID - 1] = LOAN_ID;
             } else {
                 ownershipContract.transferFrom(
@@ -340,7 +421,7 @@ contract DebitaV1 is ERC1155Holder {
         // Save Loan Info
         uint256 paymentPerTime;
         if (collateralInfo.paymentCount > 0) {
-            // Calculate payment per time based on payment count and interest 
+            // Calculate payment per time based on payment count and interest
             paymentPerTime =
                 ((collateralInfo.wantedLenderAmount /
                     collateralInfo.paymentCount) *
@@ -373,17 +454,22 @@ contract DebitaV1 is ERC1155Holder {
             executed: false
         });
         emit CollateralOfferDeleted(_id, msg.sender);
-        emit LoanAccepted(LOAN_ID, collateralInfo.wantedLenderToken, collateralInfo.collaterals);
+        emit LoanAccepted(
+            LOAN_ID,
+            collateralInfo.wantedLenderToken,
+            collateralInfo.collaterals
+        );
     }
 
-    function acceptLenderOffer(uint256 id)
-        public
-        payable
-    {
+    function acceptLenderOffer(uint256 id) public payable {
         LenderOInfo memory lenderInfo = LendersOffers[id];
         require(lenderInfo.owner != address(0x0), "Deleted/Expired Offer");
         // Check Whitelist
-        if ( lenderInfo.whitelist.length > 0 && (lenderInfo.whitelist[0] != msg.sender && lenderInfo.whitelist[1] != msg.sender)) {
+        if (
+            lenderInfo.whitelist.length > 0 &&
+            (lenderInfo.whitelist[0] != msg.sender &&
+                lenderInfo.whitelist[1] != msg.sender)
+        ) {
             revert();
         }
 
@@ -398,12 +484,19 @@ contract DebitaV1 is ERC1155Holder {
                 IERC20 wantedToken = IERC20(
                     lenderInfo.wantedCollateralTokens[i]
                 );
-                (bool success) = wantedToken.transferFrom(
+                uint balanceBefore = wantedToken.balanceOf(address(this));
+                bool success = wantedToken.transferFrom(
                     msg.sender,
                     address(this),
                     lenderInfo.wantedCollateralAmount[i]
                 );
                 require(success);
+                uint balanceAfter = wantedToken.balanceOf(address(this));
+                require(
+                    (balanceAfter - balanceBefore) ==
+                        lenderInfo.wantedCollateralAmount[i],
+                    "Taxable Token"
+                );
             }
         }
 
@@ -416,10 +509,18 @@ contract DebitaV1 is ERC1155Holder {
         for (uint256 i; i < 2; i++) {
             ownershipContract.mint();
             if (i == 0) {
-                ownershipContract.transferFrom(address(this), lenderInfo.owner,  NFT_ID - 1);
+                ownershipContract.transferFrom(
+                    address(this),
+                    lenderInfo.owner,
+                    NFT_ID - 1
+                );
                 loansByNFt[NFT_ID - 1] = LOAN_ID;
             } else {
-                ownershipContract.transferFrom(address(this), msg.sender, NFT_ID);
+                ownershipContract.transferFrom(
+                    address(this),
+                    msg.sender,
+                    NFT_ID
+                );
                 loansByNFt[NFT_ID] = LOAN_ID;
             }
         }
@@ -455,19 +556,31 @@ contract DebitaV1 is ERC1155Holder {
             executed: false
         });
         // Send Loan to the owner of the collateral
+        uint fee = (lenderInfo.LenderAmount * 8) / 1000;
         if (lenderInfo.LenderToken == address(0x0)) {
-            (bool success, ) = msg.sender.call{value: lenderInfo.LenderAmount}(
-                ""
-            );
+            (bool successF, ) = payable(feeAddress).call{value: fee}("");
+            require(successF, "Transaction Error");
+            (bool success, ) = msg.sender.call{
+                value: lenderInfo.LenderAmount - fee
+            }("");
             require(success, "Transaction Error");
         } else {
             IERC20 lenderToken = IERC20(lenderInfo.LenderToken);
-             (bool successF) = lenderToken.transfer(msg.sender, lenderInfo.LenderAmount);
-             require(successF);
+            bool successF = lenderToken.transfer(
+                msg.sender,
+                lenderInfo.LenderAmount - fee
+            );
+            bool successFee = lenderToken.transfer(feeAddress, fee);
+            require(successF);
+            require(successFee);
         }
 
         emit LenderOfferDeleted(id, msg.sender);
-        emit LoanAccepted(LOAN_ID, lenderInfo.LenderToken, lenderInfo.wantedCollateralTokens);
+        emit LoanAccepted(
+            LOAN_ID,
+            lenderInfo.LenderToken,
+            lenderInfo.wantedCollateralTokens
+        );
     }
 
     function payDebt(uint256 id) public payable {
@@ -489,9 +602,10 @@ contract DebitaV1 is ERC1155Holder {
         ) {
             revert();
         }
-        
-        // Update the claimable debt for the lender
-        claimeableDebt[loan.LenderOwnerId] += loan.paymentAmount;
+
+        uint interestPerPayment = ((loan.paymentAmount * loan.paymentCount) - loan.LenderAmount) / loan.paymentCount;
+        uint fee = (interestPerPayment * 8) / 100;
+
         // Increment the number of payments made
         loan.paymentsPaid += 1;
         // Update the deadline for the next payment
@@ -499,20 +613,28 @@ contract DebitaV1 is ERC1155Holder {
 
         if (loan.LenderToken == address(0x0)) {
             require(msg.value >= loan.paymentAmount);
+            (bool success, ) = payable(feeAddress).call{value: fee}("");
+            require(success);
         } else {
             IERC20 lenderToken = IERC20(loan.LenderToken);
-            (bool success) = lenderToken.transferFrom(
+            bool success = lenderToken.transferFrom(
                 msg.sender,
                 address(this),
-                loan.paymentAmount
+                loan.paymentAmount - fee
             );
+
+            bool success_1 = lenderToken.transferFrom(
+                feeAddress,
+                address(this),
+                fee
+            );
+            require(success_1);
             require(success);
         }
+        // Update the claimable debt for the lender
+        claimeableDebt[loan.LenderOwnerId] += loan.paymentAmount - fee;
         // Ensure the token transfer was successful
         Loans[id] = loan;
-
-
-      
     }
 
     function claimCollateralasLender(uint256 id) public {
@@ -534,24 +656,36 @@ contract DebitaV1 is ERC1155Holder {
         loan.executed = true;
         Loans[id] = loan;
         uint256 WEIamount;
-
+        uint AddWEI;
         // Iterate over the collateralTokens and collateralAmount arrays in the loan
         for (uint256 i; i < loan.collaterals.length; i++) {
+            uint fee = (loan.collateralAmount[i] * 2) / 100;
             if (loan.collaterals[i] == address(0x0)) {
-            // Check if the collateral token is Ether (address(0x0))
-            // Sum up the collateral amount in Wei
-                WEIamount += loan.collateralAmount[i];
+                // Check if the collateral token is Ether (address(0x0))
+                // Sum up the collateral amount in Wei
+                WEIamount += loan.collateralAmount[i] - fee;
+                AddWEI += fee;
             } else {
                 IERC20 token = IERC20(loan.collaterals[i]);
-                 (bool successF) = token.transfer(msg.sender, loan.collateralAmount[i]);
-                 require(successF);
+                bool successF = token.transfer(
+                    msg.sender,
+                    loan.collateralAmount[i] - fee
+                );
+                bool addSuccess = token.transfer(feeAddress, fee);
+                require(successF);
+                require(addSuccess);
             }
         }
         // Transfer the Wei amount to the lender's address
-       if(WEIamount > 0) {
-         (bool success, ) = msg.sender.call{value: WEIamount}("");
-        require(success);
-       }
+        if (WEIamount > 0) {
+            (bool success, ) = msg.sender.call{value: WEIamount}("");
+            require(success);
+        }
+
+        if (AddWEI > 0) {
+            (bool success, ) = payable(feeAddress).call{value: AddWEI}("");
+            require(success);
+        }
     }
 
     function claimCollateralasBorrower(uint256 id) public {
@@ -578,14 +712,17 @@ contract DebitaV1 is ERC1155Holder {
             } else {
                 IERC20 token = IERC20(loan.collaterals[i]);
                 // Transfer the Wei amount to the lender's address
-                 (bool successF) = token.transfer(msg.sender, loan.collateralAmount[i]);
-                 require(successF);
+                bool successF = token.transfer(
+                    msg.sender,
+                    loan.collateralAmount[i]
+                );
+                require(successF);
             }
         }
         // Transfer the Wei amount to the lender's address
-        if(WEIamount > 0) {
-        (bool success, ) = msg.sender.call{value: WEIamount}("");
-        require(success);
+        if (WEIamount > 0) {
+            (bool success, ) = msg.sender.call{value: WEIamount}("");
+            require(success);
         }
     }
 
@@ -593,9 +730,10 @@ contract DebitaV1 is ERC1155Holder {
         LoanInfo memory LOAN_INFO = Loans[id];
         Ownerships ownerContract = Ownerships(NFT_CONTRACT);
         uint amount = claimeableDebt[LOAN_INFO.LenderOwnerId];
+
         // 1. Check if the sender is the owner of the lender's NFT
         // 2. Check if there is an amount available to claim
-        if(
+        if (
             ownerContract.ownerOf(LOAN_INFO.LenderOwnerId) != msg.sender ||
             amount == 0
         ) {
@@ -604,34 +742,38 @@ contract DebitaV1 is ERC1155Holder {
         // Delete the claimable debt amount for the lender
         delete claimeableDebt[LOAN_INFO.LenderOwnerId];
 
-        if(LOAN_INFO.LenderToken == address(0x0)) {
-           (bool success, ) = msg.sender.call{value: amount}("");
-           require(success, "Transaction Failed");
+        if (LOAN_INFO.LenderToken == address(0x0)) {
+            (bool success, ) = msg.sender.call{value: amount}("");
+            require(success, "Transaction Failed");
         } else {
             IERC20 lenderToken = IERC20(LOAN_INFO.LenderToken);
             // Transfer the debt amount of the token to the lender's address
-             (bool successF) = lenderToken.transfer(msg.sender, amount);
-             require(successF);
+            bool successF = lenderToken.transfer(msg.sender, amount);
+            require(successF);
         }
-
-
     }
 
+    function setFeeaddress(address _feeAdd) public onlyFeeAdd {
+        feeAddress = _feeAdd;
+    }
 
     function setNFTContract(address _newAddress) public onlyInit {
         NFT_CONTRACT = _newAddress;
     }
 
-    function getOfferLENDER_DATA(uint _id) public view returns(LenderOInfo memory) {
-      return LendersOffers[_id];
+    function getOfferLENDER_DATA(
+        uint _id
+    ) public view returns (LenderOInfo memory) {
+        return LendersOffers[_id];
     }
 
-    function getOfferCOLLATERAL_DATA(uint _id) public view returns(CollateralOInfo memory) {
-      return CollateralOffers[_id];
+    function getOfferCOLLATERAL_DATA(
+        uint _id
+    ) public view returns (CollateralOInfo memory) {
+        return CollateralOffers[_id];
     }
 
-    function getLOANS_DATA(uint _id) public view returns(LoanInfo memory) {
+    function getLOANS_DATA(uint _id) public view returns (LoanInfo memory) {
         return Loans[_id];
     }
-    
 }
