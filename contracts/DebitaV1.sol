@@ -4,8 +4,10 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "./NFT.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract DebitaV1 is ERC1155Holder {
+
+contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
     error notEnoughFunds();
     error requirementsNotFull();
 
@@ -141,7 +143,7 @@ contract DebitaV1 is ERC1155Holder {
         uint256 _timelap,
         uint256 _paymentCount,
         address[] memory _whitelist
-    ) public payable {
+    ) public payable nonReentrant() {
         if (
             _timelap < 1 days ||
             _timelap > 365 days ||
@@ -199,7 +201,7 @@ contract DebitaV1 is ERC1155Holder {
     }
 
     // Cancel Lender Offer
-    function cancelLenderOffer(uint256 id) public {
+    function cancelLenderOffer(uint256 id) public nonReentrant() {
         LenderOInfo memory _LenderINFO = LendersOffers[id];
         if (_LenderINFO.owner != msg.sender) {
             revert();
@@ -244,7 +246,7 @@ contract DebitaV1 is ERC1155Holder {
         uint256 _timelap,
         uint256 _paymentCount,
         address[] memory _whitelist
-    ) public payable {
+    ) public payable nonReentrant() {
         // Check various conditions before creating the collateral offer
         // 1. Check if the time lapse is between 1 day and 365 days
         // 2. Check if the lengths of collateralTokens and collateralAmount arrays are equal
@@ -312,7 +314,7 @@ contract DebitaV1 is ERC1155Holder {
         );
     }
 
-    function cancelCollateralOffer(uint256 _id) public {
+    function cancelCollateralOffer(uint256 _id) public nonReentrant() {
         CollateralOInfo memory collateralInfo = CollateralOffers[_id];
         require(collateralInfo.owner == msg.sender, "Not the owner");
         delete CollateralOffers[_id]; // Deleting info before transfering anything
@@ -339,7 +341,7 @@ contract DebitaV1 is ERC1155Holder {
      * @dev Accepts a collateral offer and initiates a loan.
      * @param _id The ID of the collateral offer to accept.
      */
-    function acceptCollateralOffer(uint256 _id) public payable {
+    function acceptCollateralOffer(uint256 _id) public payable nonReentrant() {
         CollateralOInfo memory collateralInfo = CollateralOffers[_id];
         require(
             collateralInfo.owner != address(0x0),
@@ -461,7 +463,7 @@ contract DebitaV1 is ERC1155Holder {
         );
     }
 
-    function acceptLenderOffer(uint256 id) public payable {
+    function acceptLenderOffer(uint256 id) public payable nonReentrant() {
         LenderOInfo memory lenderInfo = LendersOffers[id];
         require(lenderInfo.owner != address(0x0), "Deleted/Expired Offer");
         // Check Whitelist
@@ -583,7 +585,7 @@ contract DebitaV1 is ERC1155Holder {
         );
     }
 
-    function payDebt(uint256 id) public payable {
+    function payDebt(uint256 id) public payable nonReentrant() {
         LoanInfo memory loan = Loans[id];
         Ownerships ownerContract = Ownerships(NFT_CONTRACT);
 
@@ -610,6 +612,8 @@ contract DebitaV1 is ERC1155Holder {
         loan.paymentsPaid += 1;
         // Update the deadline for the next payment
         loan.deadlineNext += loan.timelap;
+        Loans[id] = loan;
+        claimeableDebt[loan.LenderOwnerId] += loan.paymentAmount - fee;
 
         if (loan.LenderToken == address(0x0)) {
             require(msg.value >= loan.paymentAmount);
@@ -631,13 +635,11 @@ contract DebitaV1 is ERC1155Holder {
             require(success_1);
             require(success);
         }
-        // Update the claimable debt for the lender
-        claimeableDebt[loan.LenderOwnerId] += loan.paymentAmount - fee;
-        // Ensure the token transfer was successful
-        Loans[id] = loan;
+    
+     
     }
 
-    function claimCollateralasLender(uint256 id) public {
+    function claimCollateralasLender(uint256 id) public nonReentrant() {
         LoanInfo memory loan = Loans[id];
         Ownerships ownerContract = Ownerships(NFT_CONTRACT);
         // 1. Check if the sender is the owner of the lender's NFT
@@ -688,7 +690,7 @@ contract DebitaV1 is ERC1155Holder {
         }
     }
 
-    function claimCollateralasBorrower(uint256 id) public {
+    function claimCollateralasBorrower(uint256 id) public nonReentrant() {
         LoanInfo memory loan = Loans[id];
         Ownerships ownerContract = Ownerships(NFT_CONTRACT);
         // 1. Check if the sender is the owner of the borrowers's NFT
@@ -726,7 +728,7 @@ contract DebitaV1 is ERC1155Holder {
         }
     }
 
-    function claimDebt(uint id) public {
+    function claimDebt(uint id) public nonReentrant() {
         LoanInfo memory LOAN_INFO = Loans[id];
         Ownerships ownerContract = Ownerships(NFT_CONTRACT);
         uint amount = claimeableDebt[LOAN_INFO.LenderOwnerId];
