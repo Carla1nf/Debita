@@ -628,14 +628,14 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             );
 
             bool success_1 = lenderToken.transferFrom(
+                msg.sender,
                 feeAddress,
-                address(this),
                 fee
             );
-            require(success_1);
-            require(success);
+            require(success_1 && success);
         }
-    
+        // Update the claimable debt for the lender
+        // Ensure the token transfer was successful
      
     }
 
