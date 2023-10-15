@@ -75,6 +75,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         uint32 collateralOwnerID;
         uint32 LenderOwnerId;
         address LenderToken;
+        uint256 cooldown;
         uint256 LenderAmount;
         address[] collaterals;
         uint256[] collateralAmount;
@@ -445,6 +446,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             collateralOwnerID: NFT_ID,
             LenderOwnerId: NFT_ID - 1,
             LenderToken: collateralInfo.wantedLenderToken,
+            cooldown: block.timestamp,
             LenderAmount: collateralInfo.wantedLenderAmount,
             collaterals: collateralInfo.collaterals,
             collateralAmount: collateralInfo.collateralAmount,
@@ -543,6 +545,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             collateralOwnerID: NFT_ID,
             LenderOwnerId: NFT_ID - 1,
             LenderToken: lenderInfo.LenderToken,
+            cooldown: block.timestamp,
             LenderAmount: lenderInfo.LenderAmount,
             collaterals: lenderInfo.wantedCollateralTokens,
             collateralAmount: lenderInfo.wantedCollateralAmount,
