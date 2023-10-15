@@ -261,6 +261,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             collateralTokens.length != collateralAmount.length ||
             _wantedLenderAmount == 0 ||
             _paymentCount > 100 ||
+            _paymentCount == 0 ||
             _paymentCount > _wantedLenderAmount ||
             _whitelist.length > 2
         ) {
@@ -526,17 +527,13 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
                 loansByNFt[NFT_ID] = LOAN_ID;
             }
         }
-        // Save Loan Info
-        uint256 paymentPerTime;
-        if (lenderInfo.paymentCount > 0) {
-            paymentPerTime =
+
+       
+          uint256  paymentPerTime =
                 ((lenderInfo.LenderAmount / lenderInfo.paymentCount) *
                     (1000 + lenderInfo.interest)) /
                 1000;
-        } else {
-            paymentPerTime = ((lenderInfo.LenderAmount *
-                (1000 + lenderInfo.interest)) / 1000);
-        }
+        
         // Calculate loan deadlines
         uint256 globalDeadline = (lenderInfo.paymentCount *
             lenderInfo.timelap) + block.timestamp;
