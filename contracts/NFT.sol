@@ -31,6 +31,7 @@ contract Ownerships is ERC721Enumerable {
     uint id = 0;
     address admin;
     address DebitaContract;
+    
     bool private initialized;
 
     constructor() ERC721("Debita Ownerships", "") {
@@ -47,6 +48,7 @@ contract Ownerships is ERC721Enumerable {
         _;
     }
 
+
     function mint() public onlyContract {
         id++;
         _mint(msg.sender, id);
@@ -54,6 +56,7 @@ contract Ownerships is ERC721Enumerable {
 
     function setDebitaContract(address newContract) public onlyOwner {
         DebitaContract = newContract;
+        initialized = true;
     }
 
     function toString(uint value) private pure returns (string memory) {
