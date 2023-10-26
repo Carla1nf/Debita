@@ -259,7 +259,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         // 1. Check if the time lapse is between 1 day and 365 days
         // 2. Check if the lengths of collateralTokens and collateralAmount arrays are equal
         // 3. Check if the wanted lender amount is non-zero
-        // 4. Check if the payment count is less than or equal to 100
+        // 4. Check if the payment count is less than or equal to 50
         // 5. Check if the payment count is less than or equal to the wanted lender amount
         // 6. Check if the length of the whitelist array is at most 2
 
