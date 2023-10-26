@@ -100,6 +100,8 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
     // NFT ID => CLAIMEABLE DEBT
     mapping(uint256 => uint256) public claimeableDebt;
 
+    uint COUNTDOWN_PERIOD = 1 days;
+
     constructor() {
         owner = msg.sender;
         feeAddress = msg.sender;
@@ -750,7 +752,9 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         }
         // Delete the claimable debt amount for the lender
         delete claimeableDebt[LOAN_INFO.LenderOwnerId];
-
+        LOAN_INFO.cooldown = block.timestamp + COUNTDOWN_PERIOD;
+        Loans[id] = LOAN_INFO;
+        
         if (LOAN_INFO.LenderToken == address(0x0)) {
             (bool success, ) = msg.sender.call{value: amount}("");
             require(success, "Transaction Failed");
