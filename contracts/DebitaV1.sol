@@ -44,7 +44,11 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
     address NFT_CONTRACT;
     // Id count of the ownership NFT minted
     uint32 NFT_ID;
+
     bool private initialized;
+
+    uint COUNTDOWN_PERIOD = 12 hours;
+
 
     // Lender & Collateral struct is the same right now, will be one  --> struct OfferInfo {}
     struct LenderOInfo {
@@ -100,7 +104,6 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
     // NFT ID => CLAIMEABLE DEBT
     mapping(uint256 => uint256) public claimeableDebt;
 
-    uint COUNTDOWN_PERIOD = 1 days;
 
     constructor() {
         owner = msg.sender;
