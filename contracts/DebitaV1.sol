@@ -110,12 +110,6 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         feeAddress = msg.sender;
     }
 
-    modifier onlyFeeAdd() {
-        if (msg.sender != feeAddress) {
-            revert();
-        }
-        _;
-    }
 
     modifier onlyOwner() {
         if(msg.sender != owner) {
@@ -767,7 +761,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         }
     }
 
-    function setFeeaddress(address _feeAdd) public onlyFeeAdd onlyOwner {
+    function setFeeaddress(address _feeAdd) public onlyOwner {
         feeAddress = _feeAdd;
     }
 
