@@ -164,7 +164,8 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             _LenderAmount == 0 ||
             _paymentCount > 50 ||
             _paymentCount > _LenderAmount ||
-            _whitelist.length > 2
+            _whitelist.length > 2 || 
+            _interest > 2000
         ) {
             revert();
         }
@@ -276,7 +277,8 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             _paymentCount > 50 ||
             _paymentCount == 0 ||
             _paymentCount > _wantedLenderAmount ||
-            _whitelist.length > 2
+            _whitelist.length > 2 || 
+            _interest > 2000
         ) {
             revert();
         }
