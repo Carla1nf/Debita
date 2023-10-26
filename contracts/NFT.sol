@@ -179,7 +179,7 @@ contract Ownerships is ERC721Enumerable {
         uint _id = _debita.loansByNFt(tokenId);
         IDEBITAV1.LoanInfo memory loan = _debita.getLOANS_DATA(_id);
         require(!loan.executed, "Already executed");
-        require(loan.cooldown < block.timestamp, "Cooldown is not finished");
+        require(loan.cooldown <= block.timestamp, "Cooldown is not finished");
 
     }
 
