@@ -157,6 +157,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             _wantedCollateralTokens.length != _wantedCollateralAmount.length ||
             _LenderAmount == 0 ||
             _paymentCount > 50 ||
+            _paymentCount == 0 ||
             _paymentCount > _LenderAmount ||
             _whitelist.length > 2 || 
             _interest > 10000
