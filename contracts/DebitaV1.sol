@@ -33,6 +33,9 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
         address[] indexed collateralTokens
     );
 
+
+    event collateralClaimed(uint256 indexed lenderID, uint256 indexed borrowerID);
+
     address immutable owner;
     address feeAddress;
     // Id of the Lender Offer ID
@@ -291,7 +294,7 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
                     address(this),
                     collateralAmount[i]
                 );
-                require(success);
+                require(success, "Error");
                 uint balanceAfter = ERC20_TOKEN.balanceOf(address(this));
                 require(
                     (balanceAfter - balanceBefore) == collateralAmount[i],
@@ -693,6 +696,8 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             (bool success, ) = payable(feeAddress).call{value: AddWEI}("");
             require(success);
         }
+
+        emit collateralClaimed(loan.LenderOwnerId, loan.collateralOwnerID);
     }
 
     function claimCollateralasBorrower(uint256 id) public nonReentrant() {
@@ -731,6 +736,8 @@ contract DebitaV1 is ERC1155Holder, ReentrancyGuard {
             (bool success, ) = msg.sender.call{value: WEIamount}("");
             require(success);
         }
+
+        emit collateralClaimed(loan.LenderOwnerId, loan.collateralOwnerID);
     }
 
     function claimDebt(uint id) public nonReentrant() {
